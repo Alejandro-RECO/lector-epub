@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Lumina EPUB — Tu Lector de Libros Local y Privado</title>
+    <meta name="description" content="Lector de EPUB moderno, inmersivo, 100% privado y local en tu navegador y teléfono móvil." />
+
+    <!-- PWA & Mobile Meta Tags -->
+    <link rel="manifest" href="./manifest.json" />
+    <meta name="theme-color" content="#0b0f19" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Lumina EPUB" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <!-- Ambient visual glows -->
+    <div class="ambient-glow"></div>
+    <div class="ambient-glow-2"></div>
+
+    <div id="app">
+      <!-- ================================================================
+           VIEW: BIBLIOTECA (LIBRARY)
+           ================================================================ -->
+      <section id="library-view" class="library-view">
+        <header class="library-header">
+          <div class="brand">
+            <div class="brand-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+                <path d="M6 6h10"></path>
+                <path d="M6 10h10"></path>
+              </svg>
+            </div>
+            <span>Lumina<span style="color: var(--accent-primary);">EPUB</span></span>
+            <span class="brand-badge">100% Local</span>
+          </div>
+
+          <div class="header-actions">
+            <div class="search-box">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="search-input" class="search-input" placeholder="Buscar en tu biblioteca..." />
+            </div>
+
+            <button id="btn-sample" class="btn btn-secondary" title="Cargar libro clásico de prueba">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+              </svg>
+              <span>Libro Demo</span>
+            </button>
+
+            <button id="btn-install" class="btn btn-secondary" style="display: none;" title="Instalar aplicación en tu dispositivo">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              <span>Instalar App</span>
+            </button>
+
+            <button id="btn-upload" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Importar EPUB</span>
+            </button>
+            <input type="file" id="file-input" accept=".epub,application/epub+zip" style="display: none;" />
+          </div>
+        </header>
+
+        <section class="library-hero">
+          <div class="hero-title">
+            <h1>Tu Estantería Digital</h1>
+            <p>Lee cómodamente tus libros favoritos en un entorno limpio, rápido y sin distracciones.</p>
+          </div>
+          <div class="library-stats">
+            <div class="stat-card">
+              <span id="stat-total" class="stat-value">0</span>
+              <span class="stat-label">Libros guardados</span>
+            </div>
+            <div class="stat-card">
+              <span id="stat-reading" class="stat-value">0</span>
+              <span class="stat-label">En progreso</span>
+            </div>
+          </div>
+        </section>
+
+        <main class="library-content">
+          <div id="books-grid" class="books-grid">
+            <!-- Dynamic book cards rendered here -->
+          </div>
+        </main>
+      </section>
+
+      <!-- ================================================================
+           VIEW: LECTOR INMERSIVO (READER)
+           ================================================================ -->
+      <section id="reader-view" class="reader-view theme-sepia" style="display: none;">
+        <!-- Top Bar -->
+        <header class="reader-topbar">
+          <div class="reader-top-left">
+            <button id="btn-back" class="btn-icon" title="Volver a la biblioteca (Esc)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+            </button>
+
+            <button id="btn-toggle-toc" class="btn-icon" title="Tabla de contenidos y marcadores (T)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="12" x2="15" y2="12"></line>
+                <line x1="3" y1="18" x2="18" y2="18"></line>
+              </svg>
+            </button>
+
+            <div class="reader-title-box">
+              <span id="reader-book-title" class="reader-book-title">Cargando libro...</span>
+              <span id="reader-chapter-title" class="reader-chapter-title">-</span>
+            </div>
+          </div>
+
+          <div class="reader-top-right">
+            <!-- Bookmark -->
+            <button id="btn-bookmark" class="btn-icon" title="Guardar marcador en esta página (B)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"></path>
+              </svg>
+            </button>
+
+            <!-- Text to Speech -->
+            <button id="btn-tts" class="btn-icon" title="Leer página en voz alta">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+              </svg>
+            </button>
+
+            <!-- Appearance Settings -->
+            <button id="btn-settings" class="btn-icon" title="Ajustes de lectura y tipografía">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+            </button>
+
+            <!-- Fullscreen -->
+            <button id="btn-fullscreen" class="btn-icon" title="Pantalla completa (F)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Stage with Viewer and navigation arrows -->
+        <main class="reader-stage">
+          <button id="btn-prev-page" class="nav-arrow prev" title="Página anterior (←)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+
+          <div id="reader-container" class="reader-container">
+            <!-- epub.js will mount iframe here -->
+          </div>
+
+          <button id="btn-next-page" class="nav-arrow next" title="Página siguiente (→)">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+        </main>
+
+        <!-- Bottom Bar with progress slider -->
+        <footer class="reader-bottombar">
+          <button id="btn-prev-chapter" class="btn-icon" title="Capítulo anterior">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="19 20 9 12 19 4 19 20"></polygon>
+              <line x1="5" y1="19" x2="5" y2="5"></line>
+            </svg>
+          </button>
+
+          <div class="progress-slider-box">
+            <input type="range" id="progress-slider" class="progress-slider" min="0" max="100" value="0" />
+            <span id="progress-text" class="progress-percentage">0%</span>
+          </div>
+
+          <button id="btn-next-chapter" class="btn-icon" title="Capítulo siguiente">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 4 15 12 5 20 5 4"></polygon>
+              <line x1="19" y1="5" x2="19" y2="19"></line>
+            </svg>
+          </button>
+        </footer>
+
+        <!-- Settings Flyout Modal -->
+        <aside id="settings-modal" class="settings-modal">
+          <div class="settings-group">
+            <span class="settings-label">Tema de Lectura</span>
+            <div class="theme-chips">
+              <button class="theme-chip light" data-theme="light">Luz</button>
+              <button class="theme-chip sepia active" data-theme="sepia">Sepia</button>
+              <button class="theme-chip dark" data-theme="dark">Noche</button>
+              <button class="theme-chip amoled" data-theme="amoled">OLED</button>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <span class="settings-label">Tipografía</span>
+            <div class="font-buttons">
+              <button class="font-btn active" data-font="serif">Serif</button>
+              <button class="font-btn" data-font="sans">Sans</button>
+              <button class="font-btn" data-font="mono">Mono</button>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div style="display: flex; justify-content: space-between;">
+              <span class="settings-label">Tamaño de Fuente</span>
+              <span id="font-size-val" style="font-size: 0.8rem; opacity: 0.8;">18px</span>
+            </div>
+            <div class="slider-control">
+              <input type="range" id="font-size-slider" min="13" max="28" value="18" />
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div style="display: flex; justify-content: space-between;">
+              <span class="settings-label">Interlineado</span>
+              <span id="line-height-val" style="font-size: 0.8rem; opacity: 0.8;">1.75</span>
+            </div>
+            <div class="slider-control">
+              <input type="range" id="line-height-slider" min="1.3" max="2.4" step="0.1" value="1.75" />
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div style="display: flex; justify-content: space-between;">
+              <span class="settings-label">Ancho de Lectura</span>
+              <span id="page-width-val" style="font-size: 0.8rem; opacity: 0.8;">900px</span>
+            </div>
+            <div class="slider-control">
+              <input type="range" id="page-width-slider" min="640" max="1200" step="20" value="900" />
+            </div>
+          </div>
+        </aside>
+
+        <!-- Sidebar Drawer (TOC & Bookmarks) -->
+        <div id="drawer-overlay" class="drawer-overlay"></div>
+        <aside id="reader-drawer" class="reader-drawer">
+          <div class="drawer-header">
+            <h3 style="font-size: 1.1rem; font-weight: 600;">Navegación</h3>
+            <button id="btn-close-drawer" class="btn-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="drawer-tabs">
+            <button id="tab-toc" class="drawer-tab-btn active">Índice</button>
+            <button id="tab-bookmarks" class="drawer-tab-btn">Marcadores</button>
+          </div>
+
+          <div class="drawer-content">
+            <ul id="toc-list" class="toc-list">
+              <!-- TOC items dynamically rendered -->
+            </ul>
+            <div id="bookmarks-list" class="bookmarks-list" style="display: none;">
+              <!-- Bookmarks dynamically rendered -->
+            </div>
+          </div>
+        </aside>
+
+        <!-- Floating Speech Bar (TTS) -->
+        <div id="speech-bar" class="speech-bar">
+          <div class="speech-wave">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+          <span style="font-size: 0.85rem; font-weight: 500;">Lectura en voz alta</span>
+          <button id="btn-speech-pause" class="btn-icon" style="width: 32px; height: 32px;" title="Pausar / Reanudar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16"></rect>
+              <rect x="14" y="4" width="4" height="16"></rect>
+            </svg>
+          </button>
+          <button id="btn-speech-rate" class="speech-speed-btn" title="Velocidad">1.0x</button>
+          <button id="btn-speech-stop" class="btn-icon" style="width: 32px; height: 32px;" title="Detener">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="5" y="5" width="14" height="14"></rect>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Drag & Drop overlay for entire window -->
+      <div id="drop-overlay" class="drop-overlay">
+        <div class="drop-card">
+          <svg width="54" height="54" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <h2>Suelta tu archivo EPUB</h2>
+          <p>Se importará automáticamente a tu biblioteca local.</p>
+        </div>
+      </div>
+
+      <!-- Toast notifications -->
+      <div id="toast-container" class="toast-container"></div>
+    </div>
+
+    <!-- Main logic -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
