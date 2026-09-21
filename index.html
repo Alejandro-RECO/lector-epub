@@ -213,8 +213,19 @@
           </button>
         </footer>
 
-        <!-- Settings Flyout Modal -->
+        <!-- Settings Flyout Modal (Bottom Sheet en Mobile) -->
+        <div id="settings-overlay" class="drawer-overlay"></div>
         <aside id="settings-modal" class="settings-modal">
+          <div class="settings-modal-header">
+            <span style="font-size: 1rem; font-weight: 600;">Ajustes de Lectura</span>
+            <button id="btn-close-settings" class="btn-icon" style="width: 32px; height: 32px;" title="Cerrar ajustes">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+
           <div class="settings-group">
             <span class="settings-label">Tema de Lectura</span>
             <div class="theme-chips">

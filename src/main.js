@@ -60,6 +60,8 @@ const elements = {
 
   // Settings Flyout
   settingsModal: document.getElementById('settings-modal'),
+  settingsOverlay: document.getElementById('settings-overlay'),
+  btnCloseSettings: document.getElementById('btn-close-settings'),
   themeChips: document.querySelectorAll('.theme-chip'),
   fontButtons: document.querySelectorAll('.font-btn'),
   fontSizeSlider: document.getElementById('font-size-slider'),
@@ -596,8 +598,22 @@ function closeDrawer() {
   elements.drawerOverlay.classList.remove('open');
 }
 
+function openSettingsModal() {
+  elements.settingsModal.classList.add('open');
+  if (elements.settingsOverlay) elements.settingsOverlay.classList.add('open');
+}
+
 function closeSettingsModal() {
   elements.settingsModal.classList.remove('open');
+  if (elements.settingsOverlay) elements.settingsOverlay.classList.remove('open');
+}
+
+function toggleSettingsModal() {
+  if (elements.settingsModal.classList.contains('open')) {
+    closeSettingsModal();
+  } else {
+    openSettingsModal();
+  }
 }
 
 // ============================================================================
@@ -782,11 +798,18 @@ function setupEventListeners() {
   // Settings Flyout Toggle
   elements.btnSettings.addEventListener('click', (e) => {
     e.stopPropagation();
-    elements.settingsModal.classList.toggle('open');
+    toggleSettingsModal();
   });
 
+  elements.btnCloseSettings?.addEventListener('click', closeSettingsModal);
+  elements.settingsOverlay?.addEventListener('click', closeSettingsModal);
+
   document.addEventListener('click', (e) => {
-    if (!elements.settingsModal.contains(e.target) && e.target !== elements.btnSettings) {
+    if (
+      !elements.settingsModal.contains(e.target) &&
+      e.target !== elements.btnSettings &&
+      !elements.btnSettings.contains(e.target)
+    ) {
       closeSettingsModal();
     }
   });
