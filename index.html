@@ -227,6 +227,14 @@
           </div>
 
           <div class="settings-group">
+            <span class="settings-label">Modo de Lectura</span>
+            <div class="flow-buttons">
+              <button class="flow-btn active" data-flow="paginated">📖 Paginado</button>
+              <button class="flow-btn" data-flow="scrolled">📜 Scroll Continuo</button>
+            </div>
+          </div>
+
+          <div class="settings-group">
             <span class="settings-label">Tema de Lectura</span>
             <div class="theme-chips">
               <button class="theme-chip light" data-theme="light">Luz</button>
@@ -292,6 +300,7 @@
           <div class="drawer-tabs">
             <button id="tab-toc" class="drawer-tab-btn active">Índice</button>
             <button id="tab-bookmarks" class="drawer-tab-btn">Marcadores</button>
+            <button id="tab-annotations" class="drawer-tab-btn">Notas</button>
           </div>
 
           <div class="drawer-content">
@@ -300,6 +309,9 @@
             </ul>
             <div id="bookmarks-list" class="bookmarks-list" style="display: none;">
               <!-- Bookmarks dynamically rendered -->
+            </div>
+            <div id="annotations-list" class="bookmarks-list" style="display: none;">
+              <!-- Highlights and notes dynamically rendered -->
             </div>
           </div>
         </aside>
@@ -324,6 +336,81 @@
               <rect x="5" y="5" width="14" height="14"></rect>
             </svg>
           </button>
+        </div>
+
+        <!-- Floating Highlight Toolbar -->
+        <div id="highlight-menu" class="highlight-menu" style="display: none;">
+          <div class="color-options">
+            <button class="color-btn" data-color="#fef08a" style="background: #fef08a;" title="Resaltar Amarillo"></button>
+            <button class="color-btn" data-color="#86efac" style="background: #86efac;" title="Resaltar Verde"></button>
+            <button class="color-btn" data-color="#93c5fd" style="background: #93c5fd;" title="Resaltar Azul"></button>
+            <button class="color-btn" data-color="#f472b6" style="background: #f472b6;" title="Resaltar Rosa"></button>
+          </div>
+          <div class="highlight-actions">
+            <button id="btn-highlight-note" class="btn-highlight-action" title="Añadir comentario">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Nota</span>
+            </button>
+            <button id="btn-close-highlight" class="btn-highlight-action" title="Cerrar">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Note / Comment Modal -->
+        <div id="note-modal-overlay" class="drawer-overlay"></div>
+        <div id="note-modal" class="custom-modal" style="display: none;">
+          <div class="custom-modal-header">
+            <h4>Añadir Nota al Texto</h4>
+            <button id="btn-close-note-modal" class="btn-icon" style="width: 30px; height: 30px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="custom-modal-body">
+            <blockquote id="note-quote-preview" class="note-quote-preview"></blockquote>
+            <textarea id="note-textarea" class="note-textarea" placeholder="Escribe tu comentario o nota personal aquí..."></textarea>
+          </div>
+          <div class="custom-modal-footer">
+            <button id="btn-cancel-note" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Cancelar</button>
+            <button id="btn-save-note" class="btn btn-primary" style="padding: 0.5rem 1rem;">Guardar Nota</button>
+          </div>
+        </div>
+
+        <!-- View Annotation Details Modal -->
+        <div id="ann-detail-overlay" class="drawer-overlay"></div>
+        <div id="ann-detail-modal" class="custom-modal" style="display: none;">
+          <div class="custom-modal-header">
+            <h4>Detalle del Resaltado</h4>
+            <button id="btn-close-ann-detail" class="btn-icon" style="width: 30px; height: 30px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="custom-modal-body">
+            <blockquote id="ann-quote" class="note-quote-preview"></blockquote>
+            <div id="ann-comment-box" class="ann-comment-box" style="display: none;">
+              <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">TU NOTA:</span>
+              <p id="ann-comment-text" style="font-size: 0.9rem; margin-top: 0.35rem; line-height: 1.4;"></p>
+            </div>
+            <textarea id="ann-edit-textarea" class="note-textarea" style="display: none;" placeholder="Modifica tu comentario..."></textarea>
+          </div>
+          <div class="custom-modal-footer">
+            <button id="btn-delete-ann" class="btn btn-secondary" style="color: #f87171; border-color: rgba(239,68,68,0.3); padding: 0.5rem 0.85rem;">
+              Eliminar
+            </button>
+            <button id="btn-edit-ann" class="btn btn-secondary" style="padding: 0.5rem 0.85rem;">Editar Nota</button>
+            <button id="btn-save-ann-edit" class="btn btn-primary" style="display: none; padding: 0.5rem 0.85rem;">Guardar</button>
+          </div>
         </div>
       </section>
 

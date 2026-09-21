@@ -1,10 +1,10 @@
 /**
  * db.js - IndexedDB storage layer for Lumina EPUB Reader
- * Handles storing books (arrayBuffer / blob), metadata, covers, bookmarks, and settings.
+ * Handles storing books (arrayBuffer / blob), metadata, covers, bookmarks, annotations, and settings.
  */
 
 const DB_NAME = 'LuminaEpubDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -28,6 +28,12 @@ function openDB() {
       if (!db.objectStoreNames.contains('bookmarks')) {
         const bookmarkStore = db.createObjectStore('bookmarks', { keyPath: 'id' });
         bookmarkStore.createIndex('bookId', 'bookId', { unique: false });
+      }
+
+      // Annotations & Highlights store
+      if (!db.objectStoreNames.contains('annotations')) {
+        const annotationStore = db.createObjectStore('annotations', { keyPath: 'id' });
+        annotationStore.createIndex('bookId', 'bookId', { unique: false });
       }
 
       // Settings store
@@ -111,19 +117,31 @@ export const db = {
   async deleteBook(id) {
     const database = await openDB();
     return new Promise((resolve, reject) => {
-      const tx = database.transaction(['books', 'bookmarks'], 'readwrite');
+      const tx = database.transaction(['books', 'bookmarks', 'annotations'], 'readwrite');
       const bookStore = tx.objectStore('books');
       const bookmarkStore = tx.objectStore('bookmarks');
+      const annotationStore = tx.objectStore('annotations');
 
       bookStore.delete(id);
 
       // Clean up bookmarks for this book
-      const index = bookmarkStore.index('bookId');
-      const req = index.openKeyCursor(IDBKeyRange.only(id));
-      req.onsuccess = () => {
-        const cursor = req.result;
+      const bmIndex = bookmarkStore.index('bookId');
+      const bmReq = bmIndex.openKeyCursor(IDBKeyRange.only(id));
+      bmReq.onsuccess = () => {
+        const cursor = bmReq.result;
         if (cursor) {
           bookmarkStore.delete(cursor.primaryKey);
+          cursor.continue();
+        }
+      };
+
+      // Clean up annotations for this book
+      const annIndex = annotationStore.index('bookId');
+      const annReq = annIndex.openKeyCursor(IDBKeyRange.only(id));
+      annReq.onsuccess = () => {
+        const cursor = annReq.result;
+        if (cursor) {
+          annotationStore.delete(cursor.primaryKey);
           cursor.continue();
         }
       };
@@ -172,6 +190,50 @@ export const db = {
       const tx = database.transaction('bookmarks', 'readwrite');
       const store = tx.objectStore('bookmarks');
       const request = store.delete(bookmarkId);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  // Annotations & Highlights API
+  async getAnnotations(bookId) {
+    const database = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = database.transaction('annotations', 'readonly');
+      const store = tx.objectStore('annotations');
+      const index = store.index('bookId');
+      const request = index.getAll(IDBKeyRange.only(bookId));
+      request.onsuccess = () => {
+        const list = request.result || [];
+        list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        resolve(list);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  async addAnnotation(annotation) {
+    const database = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = database.transaction('annotations', 'readwrite');
+      const store = tx.objectStore('annotations');
+      const item = {
+        id: 'ann_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        createdAt: Date.now(),
+        ...annotation
+      };
+      const request = store.put(item);
+      request.onsuccess = () => resolve(item);
+      request.onerror = () => reject(request.error);
+    });
+  },
+
+  async deleteAnnotation(id) {
+    const database = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = database.transaction('annotations', 'readwrite');
+      const store = tx.objectStore('annotations');
+      const request = store.delete(id);
       request.onsuccess = () => resolve(true);
       request.onerror = () => reject(request.error);
     });

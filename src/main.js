@@ -19,11 +19,15 @@ const state = {
     fontSize: 18,
     fontFamily: 'serif',
     lineHeight: 1.75,
-    pageWidth: 900
+    pageWidth: 900,
+    flow: 'paginated' // 'paginated' or 'scrolled'
   },
   tocItems: [],
   currentCfi: null,
-  saveDebounceTimer: null
+  saveDebounceTimer: null,
+  pendingSelection: null,
+  activeAnnotation: null,
+  hudVisible: true
 };
 
 // DOM Elements
@@ -62,6 +66,7 @@ const elements = {
   settingsModal: document.getElementById('settings-modal'),
   settingsOverlay: document.getElementById('settings-overlay'),
   btnCloseSettings: document.getElementById('btn-close-settings'),
+  flowButtons: document.querySelectorAll('.flow-btn'),
   themeChips: document.querySelectorAll('.theme-chip'),
   fontButtons: document.querySelectorAll('.font-btn'),
   fontSizeSlider: document.getElementById('font-size-slider'),
@@ -77,14 +82,43 @@ const elements = {
   btnCloseDrawer: document.getElementById('btn-close-drawer'),
   tabToc: document.getElementById('tab-toc'),
   tabBookmarks: document.getElementById('tab-bookmarks'),
+  tabAnnotations: document.getElementById('tab-annotations'),
   tocList: document.getElementById('toc-list'),
   bookmarksList: document.getElementById('bookmarks-list'),
+  annotationsList: document.getElementById('annotations-list'),
 
   // Speech TTS Bar
   speechBar: document.getElementById('speech-bar'),
   btnSpeechPause: document.getElementById('btn-speech-pause'),
   btnSpeechRate: document.getElementById('btn-speech-rate'),
-  btnSpeechStop: document.getElementById('btn-speech-stop')
+  btnSpeechStop: document.getElementById('btn-speech-stop'),
+
+  // Highlights & Notes
+  highlightMenu: document.getElementById('highlight-menu'),
+  colorButtons: document.querySelectorAll('.color-btn'),
+  btnHighlightNote: document.getElementById('btn-highlight-note'),
+  btnCloseHighlight: document.getElementById('btn-close-highlight'),
+
+  // Note Modal
+  noteModalOverlay: document.getElementById('note-modal-overlay'),
+  noteModal: document.getElementById('note-modal'),
+  btnCloseNoteModal: document.getElementById('btn-close-note-modal'),
+  noteQuotePreview: document.getElementById('note-quote-preview'),
+  noteTextarea: document.getElementById('note-textarea'),
+  btnCancelNote: document.getElementById('btn-cancel-note'),
+  btnSaveNote: document.getElementById('btn-save-note'),
+
+  // Annotation Detail Modal
+  annDetailOverlay: document.getElementById('ann-detail-overlay'),
+  annDetailModal: document.getElementById('ann-detail-modal'),
+  btnCloseAnnDetail: document.getElementById('btn-close-ann-detail'),
+  annQuote: document.getElementById('ann-quote'),
+  annCommentBox: document.getElementById('ann-comment-box'),
+  annCommentText: document.getElementById('ann-comment-text'),
+  annEditTextarea: document.getElementById('ann-edit-textarea'),
+  btnDeleteAnn: document.getElementById('btn-delete-ann'),
+  btnEditAnn: document.getElementById('btn-edit-ann'),
+  btnSaveAnnEdit: document.getElementById('btn-save-ann-edit')
 };
 
 // ============================================================================
@@ -94,11 +128,6 @@ async function init() {
   await loadSettings();
   setupEventListeners();
   await loadLibrary();
-
-  // If library is completely empty on first visit, optionally offer the sample book
-  if (state.books.length === 0) {
-    console.log('Library is empty. Ready for EPUB files or Demo.');
-  }
 }
 
 // ============================================================================
@@ -113,12 +142,17 @@ async function loadSettings() {
 }
 
 function applySettingsToUI() {
-  // Theme chip active state
+  // Flow mode (Reading mode)
+  elements.flowButtons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.flow === state.settings.flow);
+  });
+
+  // Theme chips
   elements.themeChips.forEach(chip => {
     chip.classList.toggle('active', chip.dataset.theme === state.settings.theme);
   });
 
-  // Font button active state
+  // Font family
   elements.fontButtons.forEach(btn => {
     btn.classList.toggle('active', btn.dataset.font === state.settings.fontFamily);
   });
@@ -193,7 +227,7 @@ function renderLibrary() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
             </svg>
-            Cargar "El Principito"
+            <span>Cargar "El Principito"</span>
           </button>
           <button id="btn-empty-upload" class="btn btn-primary">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -201,7 +235,7 @@ function renderLibrary() {
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            Seleccionar archivo EPUB
+            <span>Seleccionar archivo EPUB</span>
           </button>
         </div>
       </div>
@@ -260,7 +294,6 @@ function renderLibrary() {
       </div>
     `;
 
-    // Click on card opens reader
     card.addEventListener('click', (e) => {
       const delBtn = e.target.closest('[data-action="delete"]');
       if (delBtn) {
@@ -299,7 +332,6 @@ async function handleFiles(files) {
 }
 
 async function importEpubBuffer(arrayBuffer, filename = 'Libro') {
-  // Parse with epub.js to extract metadata and cover
   const book = ePub(arrayBuffer);
   await book.ready;
 
@@ -309,7 +341,6 @@ async function importEpubBuffer(arrayBuffer, filename = 'Libro') {
   try {
     const rawCoverUrl = await book.coverUrl();
     if (rawCoverUrl) {
-      // Convert object URL or internal URL to Blob URL / DataURL
       const resp = await fetch(rawCoverUrl);
       const blob = await resp.blob();
       coverUrl = await blobToDataURL(blob);
@@ -374,6 +405,8 @@ async function openReader(bookId) {
 
   state.currentBook = book;
   state.currentView = 'reader';
+  state.hudVisible = true;
+  elements.readerView.classList.remove('hud-hidden');
 
   // Switch views
   elements.libraryView.style.display = 'none';
@@ -393,8 +426,12 @@ async function openReader(bookId) {
     fontSize: state.settings.fontSize,
     fontFamily: state.settings.fontFamily,
     lineHeight: state.settings.lineHeight,
+    flow: state.settings.flow || 'paginated',
     onRelocate: handleReaderRelocate,
     onLoaded: handleReaderLoaded,
+    onSelected: handleTextSelected,
+    onAnnotationClick: handleAnnotationClick,
+    onCenterTap: toggleReaderHud,
     onError: (err) => {
       showToast('Error cargando el contenido del libro.', 'error');
     },
@@ -418,6 +455,7 @@ function closeReader() {
   elements.speechBar.classList.remove('open', 'playing');
   closeDrawer();
   closeSettingsModal();
+  hideHighlightMenu();
 
   state.currentBook = null;
   state.currentView = 'library';
@@ -428,10 +466,16 @@ function closeReader() {
   loadLibrary();
 }
 
+function toggleReaderHud() {
+  state.hudVisible = !state.hudVisible;
+  elements.readerView.classList.toggle('hud-hidden', !state.hudVisible);
+}
+
 function handleReaderLoaded({ metadata, toc }) {
   state.tocItems = toc;
   renderToc(toc);
   loadBookmarksForCurrentBook();
+  loadAnnotationsForCurrentBook();
 }
 
 function handleReaderRelocate({ cfi, percentage, chapterTitle }) {
@@ -441,12 +485,10 @@ function handleReaderRelocate({ cfi, percentage, chapterTitle }) {
   elements.progressSlider.value = percentage;
   elements.progressText.textContent = `${percentage}%`;
 
-  // Update chapter title if detected
   if (chapterTitle) {
     elements.readerChapterTitle.textContent = chapterTitle;
   }
 
-  // Highlight active TOC item
   highlightActiveTocItem();
 
   // Debounced save to IndexedDB
@@ -461,6 +503,181 @@ function handleReaderRelocate({ cfi, percentage, chapterTitle }) {
       state.currentBook.progress = percentage;
     }
   }, 500);
+}
+
+// ============================================================================
+// HIGHLIGHTS & ANNOTATIONS
+// ============================================================================
+function handleTextSelected({ cfiRange, text }) {
+  state.pendingSelection = { cfiRange, text };
+  elements.highlightMenu.style.display = 'flex';
+}
+
+function hideHighlightMenu() {
+  state.pendingSelection = null;
+  elements.highlightMenu.style.display = 'none';
+}
+
+async function applyHighlight(colorHex) {
+  if (!state.pendingSelection || !state.currentBook) return;
+
+  const { cfiRange, text } = state.pendingSelection;
+  const ann = {
+    bookId: state.currentBook.id,
+    cfiRange,
+    text,
+    colorHex,
+    comment: ''
+  };
+
+  const saved = await db.addAnnotation(ann);
+  state.reader?.addAnnotation(cfiRange, colorHex, saved);
+  hideHighlightMenu();
+  showToast('Texto resaltado');
+  await loadAnnotationsForCurrentBook();
+}
+
+function openNoteModal() {
+  if (!state.pendingSelection) return;
+  elements.noteQuotePreview.textContent = `«${state.pendingSelection.text}»`;
+  elements.noteTextarea.value = '';
+  elements.noteModalOverlay.classList.add('open');
+  elements.noteModal.style.display = 'flex';
+  elements.noteTextarea.focus();
+}
+
+function closeNoteModal() {
+  elements.noteModalOverlay.classList.remove('open');
+  elements.noteModal.style.display = 'none';
+}
+
+async function saveNote() {
+  if (!state.pendingSelection || !state.currentBook) return;
+
+  const comment = elements.noteTextarea.value.trim();
+  const { cfiRange, text } = state.pendingSelection;
+  const colorHex = '#fef08a'; // default yellow for notes
+
+  const ann = {
+    bookId: state.currentBook.id,
+    cfiRange,
+    text,
+    colorHex,
+    comment
+  };
+
+  const saved = await db.addAnnotation(ann);
+  state.reader?.addAnnotation(cfiRange, colorHex, saved);
+  closeNoteModal();
+  hideHighlightMenu();
+  showToast('Nota guardada');
+  await loadAnnotationsForCurrentBook();
+}
+
+function handleAnnotationClick(ann) {
+  state.activeAnnotation = ann;
+  elements.annQuote.textContent = `«${ann.text}»`;
+
+  if (ann.comment) {
+    elements.annCommentBox.style.display = 'block';
+    elements.annCommentText.textContent = ann.comment;
+  } else {
+    elements.annCommentBox.style.display = 'none';
+  }
+
+  elements.annEditTextarea.style.display = 'none';
+  elements.btnSaveAnnEdit.style.display = 'none';
+  elements.btnEditAnn.style.display = 'inline-flex';
+
+  elements.annDetailOverlay.classList.add('open');
+  elements.annDetailModal.style.display = 'flex';
+}
+
+function closeAnnDetailModal() {
+  state.activeAnnotation = null;
+  elements.annDetailOverlay.classList.remove('open');
+  elements.annDetailModal.style.display = 'none';
+}
+
+async function deleteActiveAnnotation() {
+  if (!state.activeAnnotation) return;
+  const { id, cfiRange } = state.activeAnnotation;
+
+  await db.deleteAnnotation(id);
+  state.reader?.removeAnnotation(cfiRange);
+  closeAnnDetailModal();
+  showToast('Resaltado eliminado');
+  await loadAnnotationsForCurrentBook();
+}
+
+async function loadAnnotationsForCurrentBook() {
+  if (!state.currentBook) return;
+  const annotations = await db.getAnnotations(state.currentBook.id);
+  elements.annotationsList.innerHTML = '';
+
+  // Apply to reader rendition
+  annotations.forEach(ann => {
+    state.reader?.addAnnotation(ann.cfiRange, ann.colorHex || '#fef08a', ann);
+  });
+
+  if (annotations.length === 0) {
+    elements.annotationsList.innerHTML = `
+      <div style="padding: 2rem 1rem; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+        No tienes notas ni textos resaltados.<br/>Selecciona cualquier texto en el libro para resaltarlo o añadirle un apunte.
+      </div>
+    `;
+    return;
+  }
+
+  annotations.forEach(ann => {
+    const card = document.createElement('div');
+    card.className = 'bookmark-card';
+    const dateStr = new Date(ann.createdAt).toLocaleDateString('es-ES', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    card.innerHTML = `
+      <div style="display: flex; gap: 0.6rem; align-items: flex-start; flex: 1; min-width: 0;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${ann.colorHex || '#fef08a'}; margin-top: 4px; flex-shrink: 0;"></span>
+        <div class="bookmark-info" style="flex: 1; min-width: 0;">
+          <span class="bookmark-chapter" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-style: italic;">«${escapeHtml(ann.text)}»</span>
+          ${ann.comment ? `<p style="font-size: 0.8rem; color: #a5b4fc; margin-top: 0.2rem;">💬 ${escapeHtml(ann.comment)}</p>` : ''}
+          <span class="bookmark-date">${dateStr}</span>
+        </div>
+      </div>
+      <button class="btn-icon" style="width: 28px; height: 28px; flex-shrink: 0;" title="Eliminar nota" data-ann-del="${ann.id}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    `;
+
+    card.addEventListener('click', (e) => {
+      const delBtn = e.target.closest('[data-ann-del]');
+      if (delBtn) {
+        e.stopPropagation();
+        deleteAnnotation(ann.id, ann.cfiRange);
+        return;
+      }
+      if (state.reader) {
+        state.reader.goToCfi(ann.cfiRange);
+      }
+      closeDrawer();
+    });
+
+    elements.annotationsList.appendChild(card);
+  });
+}
+
+async function deleteAnnotation(id, cfiRange) {
+  await db.deleteAnnotation(id);
+  state.reader?.removeAnnotation(cfiRange);
+  showToast('Resaltado eliminado');
+  await loadAnnotationsForCurrentBook();
 }
 
 // ============================================================================
@@ -640,7 +857,6 @@ function toggleTts() {
   }
 }
 
-// Speech state observer
 speechManager.subscribe(({ state: speechState }) => {
   if (speechState === 'playing') {
     elements.speechBar.classList.add('open', 'playing');
@@ -658,7 +874,6 @@ speechManager.subscribe(({ state: speechState }) => {
       </svg>
     `;
   } else {
-    // stopped
     elements.speechBar.classList.remove('playing');
   }
 });
@@ -667,9 +882,7 @@ speechManager.subscribe(({ state: speechState }) => {
 // KEYBOARD SHORTCUTS
 // ============================================================================
 function handleKeyboardShortcut(e) {
-  // If typing in input, ignore
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
   if (state.currentView !== 'reader') return;
 
   switch (e.key) {
@@ -696,10 +909,6 @@ function handleKeyboardShortcut(e) {
         openDrawer();
       }
       break;
-    case 'f':
-    case 'F':
-      toggleFullscreen();
-      break;
     case 'Escape':
       if (elements.readerDrawer.classList.contains('open')) {
         closeDrawer();
@@ -709,14 +918,6 @@ function handleKeyboardShortcut(e) {
         closeReader();
       }
       break;
-  }
-}
-
-function toggleFullscreen() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(() => {});
-  } else {
-    document.exitFullscreen().catch(() => {});
   }
 }
 
@@ -766,7 +967,6 @@ function setupEventListeners() {
   elements.btnBack.addEventListener('click', closeReader);
   elements.btnBookmark.addEventListener('click', addBookmarkCurrentPage);
   elements.btnTts.addEventListener('click', toggleTts);
-  elements.btnFullscreen.addEventListener('click', toggleFullscreen);
 
   // Reader navigation
   elements.btnPrevPage.addEventListener('click', () => state.reader?.prev());
@@ -782,14 +982,12 @@ function setupEventListeners() {
 
   // Prev / Next Chapter
   elements.btnPrevChapter.addEventListener('click', () => {
-    // Jump -10% or previous section
     const currentPct = parseFloat(elements.progressSlider.value) || 0;
     const target = Math.max(0, currentPct - 5);
     state.reader?.goToPercentage(target / 100);
   });
 
   elements.btnNextChapter.addEventListener('click', () => {
-    // Jump +10% or next section
     const currentPct = parseFloat(elements.progressSlider.value) || 0;
     const target = Math.min(100, currentPct + 5);
     state.reader?.goToPercentage(target / 100);
@@ -812,6 +1010,15 @@ function setupEventListeners() {
     ) {
       closeSettingsModal();
     }
+  });
+
+  // Reading Mode Buttons (Flow)
+  elements.flowButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.flow;
+      updateSetting('flow', mode);
+      showToast(mode === 'scrolled' ? 'Modo Scroll Continuo activado' : 'Modo Paginado activado');
+    });
   });
 
   // Theme chips
@@ -865,15 +1072,68 @@ function setupEventListeners() {
   elements.tabToc.addEventListener('click', () => {
     elements.tabToc.classList.add('active');
     elements.tabBookmarks.classList.remove('active');
+    elements.tabAnnotations.classList.remove('active');
     elements.tocList.style.display = 'flex';
     elements.bookmarksList.style.display = 'none';
+    elements.annotationsList.style.display = 'none';
   });
 
   elements.tabBookmarks.addEventListener('click', () => {
     elements.tabBookmarks.classList.add('active');
     elements.tabToc.classList.remove('active');
+    elements.tabAnnotations.classList.remove('active');
     elements.tocList.style.display = 'none';
     elements.bookmarksList.style.display = 'block';
+    elements.annotationsList.style.display = 'none';
+  });
+
+  elements.tabAnnotations.addEventListener('click', () => {
+    elements.tabAnnotations.classList.add('active');
+    elements.tabToc.classList.remove('active');
+    elements.tabBookmarks.classList.remove('active');
+    elements.tocList.style.display = 'none';
+    elements.bookmarksList.style.display = 'none';
+    elements.annotationsList.style.display = 'block';
+  });
+
+  // Highlight color buttons
+  elements.colorButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyHighlight(btn.dataset.color);
+    });
+  });
+
+  elements.btnHighlightNote.addEventListener('click', openNoteModal);
+  elements.btnCloseHighlight.addEventListener('click', hideHighlightMenu);
+
+  // Note Modal
+  elements.btnCloseNoteModal.addEventListener('click', closeNoteModal);
+  elements.btnCancelNote.addEventListener('click', closeNoteModal);
+  elements.noteModalOverlay.addEventListener('click', closeNoteModal);
+  elements.btnSaveNote.addEventListener('click', saveNote);
+
+  // Annotation Detail Modal
+  elements.btnCloseAnnDetail.addEventListener('click', closeAnnDetailModal);
+  elements.annDetailOverlay.addEventListener('click', closeAnnDetailModal);
+  elements.btnDeleteAnn.addEventListener('click', deleteActiveAnnotation);
+
+  elements.btnEditAnn.addEventListener('click', () => {
+    elements.annEditTextarea.value = state.activeAnnotation?.comment || '';
+    elements.annEditTextarea.style.display = 'block';
+    elements.annCommentBox.style.display = 'none';
+    elements.btnEditAnn.style.display = 'none';
+    elements.btnSaveAnnEdit.style.display = 'inline-flex';
+    elements.annEditTextarea.focus();
+  });
+
+  elements.btnSaveAnnEdit.addEventListener('click', async () => {
+    if (!state.activeAnnotation) return;
+    const newComment = elements.annEditTextarea.value.trim();
+    state.activeAnnotation.comment = newComment;
+    await db.addAnnotation(state.activeAnnotation);
+    showToast('Nota actualizada');
+    closeAnnDetailModal();
+    await loadAnnotationsForCurrentBook();
   });
 
   // Speech Floating Controls
@@ -890,7 +1150,6 @@ function setupEventListeners() {
     elements.speechBar.classList.remove('open', 'playing');
   });
 
-  // Speech Speed Cycle (1.0x -> 1.25x -> 1.5x -> 0.75x -> 1.0x)
   const speeds = [1.0, 1.25, 1.5, 0.75];
   let speedIdx = 0;
   elements.btnSpeechRate.addEventListener('click', () => {
@@ -915,10 +1174,7 @@ function showToast(message, type = 'info') {
     toast.style.borderLeftColor = '#ef4444';
   }
 
-  toast.innerHTML = `
-    <span>${escapeHtml(message)}</span>
-  `;
-
+  toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
   elements.toastContainer.appendChild(toast);
 
   setTimeout(() => {
@@ -959,7 +1215,11 @@ function initPwa() {
       const swUrl = import.meta.env.BASE_URL + 'sw.js';
       navigator.serviceWorker
         .register(swUrl)
-        .then((reg) => console.log('ServiceWorker registrado con éxito:', reg.scope))
+        .then((reg) => {
+          console.log('ServiceWorker registrado:', reg.scope);
+          // Check for updates
+          reg.update();
+        })
         .catch((err) => console.warn('Error registrando ServiceWorker:', err));
     });
   }
@@ -978,7 +1238,7 @@ function initPwa() {
         deferredInstallPrompt.prompt();
         const { outcome } = await deferredInstallPrompt.userChoice;
         if (outcome === 'accepted') {
-          showToast('¡Instalando Lumina EPUB en tu dispositivo!');
+          showToast('¡Instalando Lumina EPUB!');
           elements.btnInstall.style.display = 'none';
         }
         deferredInstallPrompt = null;

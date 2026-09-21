@@ -1,12 +1,13 @@
 /**
  * sw.js - Service Worker for Lumina EPUB
- * Compatible with root domain and subdirectories (e.g. GitHub Pages)
+ * Network-first for HTML updates, Stale-while-revalidate for assets
  */
 
-const CACHE_NAME = 'lumina-epub-cache-v2';
+const CACHE_NAME = 'lumina-epub-cache-v3';
 
-// Install: Cache essential shell
+// Install: Skip waiting immediately
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   const scope = self.registration.scope;
   const assetsToPrecache = [
     scope,
@@ -20,11 +21,11 @@ self.addEventListener('install', (event) => {
       return cache.addAll(assetsToPrecache).catch((err) => {
         console.warn('Precache note:', err);
       });
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
-// Activate: Clean up old caches
+// Activate: Claim clients and delete older caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -35,20 +36,38 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Stale-while-revalidate strategy with offline fallback
+// Fetch Strategy
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
-  // Ignore non-GET requests and chrome-extension / non-http schemas
   if (request.method !== 'GET' || !request.url.startsWith('http')) {
     return;
   }
 
-  // Never cache IndexedDB or internal blobs
   if (request.url.startsWith('blob:') || request.url.startsWith('data:')) {
     return;
   }
 
+  // 1. Network-First for Navigation (HTML) so code updates are received immediately
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          const scope = self.registration.scope;
+          return caches.match(scope + 'index.html') || caches.match(scope);
+        })
+    );
+    return;
+  }
+
+  // 2. Cache-First with Network Revalidation for static assets
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       const fetchPromise = fetch(request)
@@ -61,13 +80,7 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {
-          // If offline and navigating, return cached index
-          if (request.mode === 'navigate') {
-            const scope = self.registration.scope;
-            return caches.match(scope + 'index.html') || caches.match(scope);
-          }
-        });
+        .catch(() => cachedResponse);
 
       return cachedResponse || fetchPromise;
     })

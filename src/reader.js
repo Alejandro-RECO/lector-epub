@@ -15,6 +15,9 @@ export class ReaderEngine {
     this.onLoaded = options.onLoaded || (() => {});
     this.onError = options.onError || console.error;
     this.onKey = options.onKey || (() => {});
+    this.onSelected = options.onSelected || (() => {});
+    this.onAnnotationClick = options.onAnnotationClick || (() => {});
+    this.onCenterTap = options.onCenterTap || (() => {});
 
     // Reading settings
     this.settings = {
@@ -34,16 +37,16 @@ export class ReaderEngine {
       // 1. Initialize book
       this.book = ePub(bookSource);
 
-      // 2. Setup rendition
+      // 2. Setup rendition with chosen flow mode
       this.rendition = this.book.renderTo(this.container, {
         width: '100%',
         height: '100%',
-        spread: this.settings.spread,
+        spread: this.settings.flow === 'scrolled' ? 'none' : this.settings.spread,
         flow: this.settings.flow,
         minSpreadWidth: 800
       });
 
-      // 3. Register themes
+      // 3. Register themes & typography
       this.registerThemes();
       this.applyCurrentStyles();
 
@@ -72,18 +75,45 @@ export class ReaderEngine {
         this.onKey(e);
       });
 
-      // 6. Handle clicks inside iframe (e.g. forward margins)
-      this.rendition.on('click', (e) => {
-        const width = this.container.clientWidth;
-        const x = e.clientX;
-        if (x < width * 0.18) {
-          this.prev();
-        } else if (x > width * 0.82) {
-          this.next();
+      // 6. Handle selection for highlighting & comments
+      this.rendition.on('selected', (cfiRange, contents) => {
+        const sel = contents.window.getSelection();
+        const text = sel ? sel.toString().trim() : '';
+        if (text) {
+          this.onSelected({ cfiRange, text, contents });
         }
       });
 
-      // 7. Touch Swipe Gestures for Mobile (Kindle-like feel)
+      // 7. Handle clicks inside iframe (e.g. forward margins vs center HUD toggle)
+      this.rendition.on('click', (e) => {
+        // If there's an active text selection, don't turn pages
+        const contents = this.rendition.getContents();
+        for (const c of contents) {
+          const sel = c.window.getSelection();
+          if (sel && sel.toString().trim().length > 0) {
+            return;
+          }
+        }
+
+        const width = this.container.clientWidth;
+        const x = e.clientX;
+
+        // In scrolled mode, clicks shouldn't flip horizontal pages
+        if (this.settings.flow === 'scrolled') {
+          this.onCenterTap();
+          return;
+        }
+
+        if (x < width * 0.20) {
+          this.prev();
+        } else if (x > width * 0.80) {
+          this.next();
+        } else {
+          this.onCenterTap();
+        }
+      });
+
+      // 8. Touch Swipe Gestures for Mobile
       let touchStartX = 0;
       let touchStartY = 0;
       let touchStartTime = 0;
@@ -97,6 +127,9 @@ export class ReaderEngine {
 
       const onTouchEnd = (e) => {
         if (!e.changedTouches || e.changedTouches.length === 0) return;
+        // In scrolled mode, let native vertical touch scroll happen
+        if (this.settings.flow === 'scrolled') return;
+
         const deltaX = e.changedTouches[0].clientX - touchStartX;
         const deltaY = e.changedTouches[0].clientY - touchStartY;
         const duration = Date.now() - touchStartTime;
@@ -116,7 +149,7 @@ export class ReaderEngine {
       this.container.addEventListener('touchstart', onTouchStart, { passive: true });
       this.container.addEventListener('touchend', onTouchEnd, { passive: true });
 
-      // 7. Wait for book ready and display
+      // 9. Wait for book ready and display
       await this.book.ready;
 
       // Extract metadata
@@ -133,7 +166,7 @@ export class ReaderEngine {
         await this.rendition.display();
       }
 
-      // 8. Generate locations asynchronously in the background for accurate % and slider
+      // 10. Generate locations asynchronously for percentage calculations
       this.book.locations.generate(1200).then(() => {
         if (this.currentLocation) {
           const pct = this.book.locations.percentageFromCfi(this.currentLocation.start.cfi);
@@ -212,18 +245,20 @@ export class ReaderEngine {
       fontFamilyVal = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     } else if (this.settings.fontFamily === 'mono') {
       fontFamilyVal = "'JetBrains Mono', 'Fira Code', monospace";
-    } else if (this.settings.fontFamily === 'dyslexic') {
-      fontFamilyVal = "'OpenDyslexic', 'Comic Sans MS', sans-serif";
     }
 
-    // Apply font size and typography via themes.fontSize and default rules
+    // Apply font size and typography
     this.rendition.themes.fontSize(`${this.settings.fontSize}px`);
     this.rendition.themes.default({
       body: {
         'font-family': `${fontFamilyVal} !important`,
         'line-height': `${this.settings.lineHeight} !important`,
         'letter-spacing': '0.01em !important',
-        padding: '0 2% !important'
+        padding: this.settings.flow === 'scrolled' ? '1.5rem 5% !important' : '0 2% !important',
+        '-webkit-tap-highlight-color': 'transparent !important'
+      },
+      '::selection': {
+        'background': 'rgba(99, 102, 241, 0.3) !important'
       },
       'p, li, div': {
         'font-family': `${fontFamilyVal} !important`,
@@ -233,8 +268,53 @@ export class ReaderEngine {
   }
 
   updateSettings(newSettings) {
+    const flowChanged = newSettings.flow && newSettings.flow !== this.settings.flow;
     this.settings = { ...this.settings, ...newSettings };
+
+    if (flowChanged && this.rendition) {
+      this.rendition.flow(this.settings.flow);
+      if (this.settings.flow === 'scrolled') {
+        this.rendition.spread('none');
+      } else {
+        this.rendition.spread(this.settings.spread);
+      }
+      if (this.currentLocation) {
+        this.rendition.display(this.currentLocation.start.cfi);
+      }
+    }
+
     this.applyCurrentStyles();
+  }
+
+  addAnnotation(cfiRange, colorHex = '#fef08a', data = {}) {
+    if (!this.rendition) return;
+    try {
+      this.rendition.annotations.add(
+        'highlight',
+        cfiRange,
+        data,
+        (e) => {
+          this.onAnnotationClick(data, e);
+        },
+        'hl-custom',
+        {
+          fill: colorHex,
+          'fill-opacity': '0.4',
+          'mix-blend-mode': 'multiply'
+        }
+      );
+    } catch (err) {
+      console.warn('Annotation note:', err);
+    }
+  }
+
+  removeAnnotation(cfiRange) {
+    if (!this.rendition) return;
+    try {
+      this.rendition.annotations.remove(cfiRange, 'highlight');
+    } catch (err) {
+      console.warn('Error removing annotation:', err);
+    }
   }
 
   next() {
@@ -273,7 +353,6 @@ export class ReaderEngine {
   getChapterFromCfi(cfi, href) {
     if (!this.toc || this.toc.length === 0) return null;
 
-    // Flatten TOC for search
     const flattenToc = (items) => {
       let flat = [];
       for (const item of items) {
@@ -288,7 +367,6 @@ export class ReaderEngine {
     const flat = flattenToc(this.toc);
 
     if (href) {
-      // Find matching href
       const found = flat.find(item => {
         const itemHref = item.href.split('#')[0];
         const currentHref = href.split('#')[0];
